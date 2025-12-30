@@ -25,4 +25,4 @@ def get_full_mha_for_zip(zip_code: str) -> float:
     replace it later with a real lookup or API.
     """
     # TODO: hook this up to a real table.
-    return 4000.0  # example default
+    return 0.0  # example default
