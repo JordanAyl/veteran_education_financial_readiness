@@ -4,6 +4,19 @@ import altair as alt
 from typing import List, Tuple
 from datetime import date
 
+def inject_ga():
+    ga_code = """
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-MP5VVQS63E"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){{dataLayer.push(arguments);}}
+        gtag('js', new Date());
+        gtag('config', 'G-MP5VVQS63E');
+    </script>
+    """
+    st.markdown(ga_code, unsafe_allow_html=True)
+
 from models import BenefitProfile, AnnualRatesConfig, RateOfPursuit, SchoolType
 from calculations import estimate_all_benefits_for_term
 from config import DEFAULT_ANNUAL_RATES, get_full_mha_for_zip
@@ -122,6 +135,8 @@ def main():
         page_title="Veterans Education & Financial Readiness",
         layout="wide"
     )
+
+    inject_ga() #For google analytics
 
     st.title("🎖️ Veterans Education & Financial Readiness")
 
@@ -383,91 +398,181 @@ def main():
         term_configs=term_configs,
     )
 
+    # ----- High-level metrics we’ll reuse -----
+    final_balance = df["Projected balance"].iloc[-1]
+    min_balance = df["Projected balance"].min()
+    runway_months = len(df)
 
-    # ----- Main layout -----
-    col1, col2 = st.columns(2)
+    negative_mask = df["Projected balance"] < 0
+    if negative_mask.any():
+        first_negative_idx = negative_mask.idxmax()
+        month_negative = df.loc[first_negative_idx, "Month"]
+    else:
+        month_negative = None
 
-    # Summary stats
-    with col1:
-        st.subheader("Cashflow summary")
-
-        final_balance = df["Projected balance"].iloc[-1]
-        min_balance = df["Projected balance"].min()
-
-        negative_mask = df["Projected balance"] < 0
-        if negative_mask.any():
-            first_negative_idx = negative_mask.idxmax()
-            month_negative = df.loc[first_negative_idx, "Month"]
-        else:
-            month_negative = None
-
-        st.metric("Balance at end of period", f"${final_balance:,.0f}")
-        st.metric("Lowest balance", f"${min_balance:,.0f}")
-
-        if month_negative is not None:
-            st.warning(
-                f"⚠️ Your balance is projected to go negative around **{month_negative:%b %Y}**."
-            )
-        else:
-            st.success(
-                "✅ Your balance stays positive for the entire projection period."
-            )
-
-    # GI Bill benefits summary
-    with col2:
-        st.subheader("GI Bill / Education benefit estimates")
-
-        st.markdown(
-            f"""
-**Monthly housing (MHA estimate):** `${benefits['monthly_housing']:,.0f}`  
-**Books for this term:** `${benefits['books_for_term']:,.0f}`  
-**Tuition covered this term:** `${benefits['tuition_covered']:,.0f}`  
-**Tuition out-of-pocket this term:** `${benefits['tuition_out_of_pocket']:,.0f}`
-"""
-        )
-
-    # Chart
-    st.subheader("Projected balance over time \n(Hover over each point to see projected balance at beginning of each month.)")
-
-    # Use the existing monthly points from your forecast
-    chart_data = df[["Month", "Projected balance", "Enrollment status"]]
-
-    base = (
-        alt.Chart(chart_data)
-        .encode(
-            x=alt.X("Month:T", title="Month"),  # Altair picks full date range
-            y=alt.Y("Projected balance:Q", title="Projected balance"),
-            tooltip=[
-                alt.Tooltip("Month:T", title="Month"),
-                alt.Tooltip("Projected balance:Q", title="Balance", format="$.0f"),
-                alt.Tooltip("Enrollment status:N", title="Enrollment"),
-            ],
-        )
+    # ----- Tabs for a cleaner layout -----
+    tab_overview, tab_table, tab_assumptions, tab_feedback = st.tabs(
+        ["📊 Overview", "📅 Monthly breakdown", "⚙️ Assumptions", "💬 Feedback"]
     )
 
-    line = base.mark_line()
-    points = base.mark_circle(size=40)
+    # ===== OVERVIEW TAB =====
+    with tab_overview:
+        # Top metrics + GI Bill summary side by side
+        col1, col2 = st.columns(2)
 
-    st.altair_chart(line + points, use_container_width=True)
+        with col1:
+            st.subheader("Cashflow summary")
 
+            st.metric("Runway (months)", f"{runway_months}")
+            st.metric("Balance at end of period", f"${final_balance:,.0f}")
+            st.metric("Lowest balance", f"${min_balance:,.0f}")
 
-    # Detailed table
-    st.subheader("Monthly breakdown")
-    st.dataframe(
-        df.style.format(
-            {
-                "MHA": "${:,.0f}",
-                "Disability": "${:,.0f}",
-                "Other income": "${:,.0f}",
-                "Total income": "${:,.0f}",
-                "Fixed expenses": "${:,.0f}",
-                "Variable expenses": "${:,.0f}",
-                "Total expenses": "${:,.0f}",
-                "Net cash": "${:,.0f}",
-                "Projected balance": "${:,.0f}",
-            }
+            if month_negative is not None:
+                st.warning(
+                    f"⚠️ Your balance is projected to go negative around **{month_negative:%b %Y}**."
+                )
+            else:
+                st.success(
+                    "✅ Your balance stays positive for the entire projection period."
+                )
+
+        with col2:
+            st.subheader("GI Bill / Education benefit estimates")
+
+            st.markdown(
+                f"""
+    **Monthly housing (MHA estimate):** `${benefits['monthly_housing']:,.0f}`  
+    **Books for this term:** `${benefits['books_for_term']:,.0f}`  
+    **Tuition covered this term:** `${benefits['tuition_covered']:,.0f}`  
+    **Tuition out-of-pocket this term:** `${benefits['tuition_out_of_pocket']:,.0f}`
+    """
+            )
+
+        # Chart under the metrics
+        st.subheader(
+            "Projected balance over time  \n"
+            "(Hover over each point to see projected balance at the start of each month.)"
         )
-    )
+
+        chart_data = df[["Month", "Projected balance", "Enrollment status"]]
+
+        base = (
+            alt.Chart(chart_data)
+            .encode(
+                x=alt.X("Month:T", title="Month"),
+                y=alt.Y("Projected balance:Q", title="Projected balance ($)"),
+                tooltip=[
+                    alt.Tooltip("Month:T", title="Month"),
+                    alt.Tooltip("Projected balance:Q", title="Balance", format="$.0f"),
+                    alt.Tooltip("Enrollment status:N", title="Enrollment"),
+                ],
+            )
+        )
+
+        line = base.mark_line()
+        points = base.mark_circle(size=40)
+
+        st.altair_chart(line + points, use_container_width=True)
+
+    # ===== MONTHLY TABLE TAB =====
+    with tab_table:
+        st.subheader("Monthly breakdown")
+
+        st.dataframe(
+            df.style.format(
+                {
+                    "MHA": "${:,.0f}",
+                    "Disability": "${:,.0f}",
+                    "Other income": "${:,.0f}",
+                    "Total income": "${:,.0f}",
+                    "Fixed expenses": "${:,.0f}",
+                    "Variable expenses": "${:,.0f}",
+                    "Total expenses": "${:,.0f}",
+                    "Net cash": "${:,.0f}",
+                    "Projected balance": "${:,.0f}",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    # ===== ASSUMPTIONS TAB =====
+    with tab_assumptions:
+        st.subheader("Key assumptions")
+
+        st.markdown(f"- **Forecast start:** {forecast_start:%b %Y}")
+        st.markdown(f"- **Forecast end:** {forecast_end:%b %Y}")
+        st.markdown(f"- **Starting savings:** `${starting_savings:,.0f}`")
+        st.markdown(f"- **GI Bill percentage:** `{gi_percentage}%`")
+        st.markdown(f"- **School ZIP:** `{school_zip}`")
+        st.markdown(f"- **Rate of pursuit (effective):** `{rate_of_pursuit.name}`")
+
+        st.markdown("### Term schedule")
+        if term_configs:
+            for cfg in term_configs:
+                st.markdown(
+                    f"- **{cfg['name']}**: {cfg['rate_label']}  "
+                    f"({cfg['start']} → {cfg['end']})"
+                )
+        else:
+            st.info("No terms enabled in the sidebar.")
+
+    # ===== FEEDBACK TAB =====
+    with tab_feedback:
+        st.subheader("Feedback & suggestions")
+
+        with st.form("feedback_form"):
+            feedback_type = st.selectbox(
+                "What would you like to submit?",
+                ["Bug report", "Feature request", "Small UX tweak", "Other"],
+            )
+
+            description = st.text_area(
+                "Describe the issue or idea",
+                placeholder="What’s broken, confusing, or what would you like to see added/changed?",
+            )
+
+            steps = st.text_area(
+                "If it's a bug, how can I reproduce it? (optional)",
+                placeholder="Steps, inputs, browser/device, screenshots, etc.",
+            )
+
+            contact = st.text_input(
+                "Email (optional, only if you want a follow-up)",
+                placeholder="you@example.com",
+            )
+
+            submitted = st.form_submit_button("Send feedback")
+
+            if submitted:
+                if not description.strip():
+                    st.error("Please add at least a short description.")
+                else:
+                    import csv, os
+                    from datetime import datetime
+
+                    feedback_row = {
+                        "timestamp": datetime.utcnow().isoformat(timespec="seconds"),
+                        "type": feedback_type,
+                        "description": description,
+                        "steps": steps,
+                        "contact": contact,
+                    }
+
+                    try:
+                        file_exists = os.path.isfile("feedback.csv")
+                        with open("feedback.csv", "a", newline="", encoding="utf-8") as f:
+                            writer = csv.DictWriter(f, fieldnames=feedback_row.keys())
+                            if not file_exists:
+                                writer.writeheader()
+                            writer.writerow(feedback_row)
+
+                        st.success("Thanks — your feedback was recorded.")
+                    except Exception:
+                        st.warning(
+                            "Thanks — your feedback was submitted, but I couldn't save it on the server."
+                        )
+
 
 
 if __name__ == "__main__":
