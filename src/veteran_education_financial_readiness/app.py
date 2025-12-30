@@ -4,13 +4,14 @@ import altair as alt
 from typing import List, Tuple
 from datetime import date
 
+# Required for Google Analytics
 def inject_ga():
     ga_code = """
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-MP5VVQS63E"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){{dataLayer.push(arguments);}}
+        function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
         gtag('config', 'G-MP5VVQS63E');
     </script>
