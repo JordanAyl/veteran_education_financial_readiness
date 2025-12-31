@@ -1,0 +1,7 @@
+streamlit-analytics2
+streamlit
+pandas
+altair
+pydantic
+streamlit-analytics2
+
