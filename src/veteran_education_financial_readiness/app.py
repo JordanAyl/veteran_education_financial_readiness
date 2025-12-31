@@ -124,7 +124,7 @@ def main():
         page_title="VE&FR",
         layout="wide"
     )
-    with streamlit_analytics2.track(save_to_json="sa2_data.json"):
+    with streamlit_analytics2.track():
         st.title("🎖️ Veterans Education & Financial Readiness")
         st.header("(For Mobile Users Open the Arrows on the Top Left to Input Data)")
 
@@ -399,8 +399,8 @@ def main():
             month_negative = None
 
         # ----- Tabs for a cleaner layout -----
-        tab_overview, tab_table, tab_assumptions, tab_feedback = st.tabs(
-            ["📊 Overview", "📅 Monthly breakdown", "⚙️ Assumptions", "💬 Feedback"]
+        tab_overview, tab_table, tab_feedback = st.tabs(
+            ["📊 Overview", "📅 Monthly breakdown", "💬 Feedback"]
         )
 
         # ===== OVERVIEW TAB =====
@@ -462,6 +462,14 @@ def main():
 
             st.altair_chart(line + points, use_container_width=True)
 
+            with st.expander("ℹ️ Assumptions & Notes"):
+                st.markdown(f"- **Forecast period:** {forecast_start:%b %Y} → {forecast_end:%b %Y}")
+                st.markdown(f"- **Starting savings used:** `${starting_savings:,.0f}`")
+                st.markdown(f"- **GI Bill percentage:** `{gi_percentage}%`")
+                st.markdown(f"- **Effective rate of pursuit:** `{rate_of_pursuit.name}`")
+                st.markdown(f"- Housing estimate based on input ZIP and enrollment intensity.")
+                st.markdown(f"- Projections are estimates only and may differ from actual VA payments.")
+
         # ===== MONTHLY TABLE TAB =====
         with tab_table:
             st.subheader("Monthly breakdown")
@@ -510,27 +518,6 @@ def main():
                         st.write(f"- Variable: ${row['Variable expenses']:,.0f}")
 
                         st.write(f"**Net cashflow:** ${row['Net cash']:,.0f}")
-
-        # ===== ASSUMPTIONS TAB =====
-        with tab_assumptions:
-            st.subheader("Key assumptions")
-
-            st.markdown(f"- **Forecast start:** {forecast_start:%b %Y}")
-            st.markdown(f"- **Forecast end:** {forecast_end:%b %Y}")
-            st.markdown(f"- **Starting savings:** `${starting_savings:,.0f}`")
-            st.markdown(f"- **GI Bill percentage:** `{gi_percentage}%`")
-            st.markdown(f"- **School ZIP:** `{school_zip}`")
-            st.markdown(f"- **Rate of pursuit (effective):** `{rate_of_pursuit.name}`")
-
-            st.markdown("### Term schedule")
-            if term_configs:
-                for cfg in term_configs:
-                    st.markdown(
-                        f"- **{cfg['name']}**: {cfg['rate_label']}  "
-                        f"({cfg['start']} → {cfg['end']})"
-                    )
-            else:
-                st.info("No terms enabled in the sidebar.")
 
         # ===== FEEDBACK TAB =====
         with tab_feedback:
